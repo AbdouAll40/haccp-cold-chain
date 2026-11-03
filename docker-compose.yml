@@ -1,166 +1,67 @@
-name: haccp-cold-chain
-
-# Copy .env.example to .env before the first run:  cp .env.example .env
-
 services:
-
-  # ---------- Messaging ----------
-  mosquitto:
-    image: eclipse-mosquitto:2.0
-    restart: unless-stopped
-    ports:
-      - "1883:1883"
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: foodsafe
+      POSTGRES_PASSWORD: foodsafe
+      POSTGRES_DB: foodsafe
     volumes:
-      - ./mosquitto/config:/mosquitto/config:ro
-      - mosquitto-data:/mosquitto/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "mosquitto_sub -h localhost -t '$$SYS/broker/uptime' -C 1 -W 3 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD-SHELL", "pg_isready -U foodsafe"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
-  # ---------- Simulators (Member 1) ----------
-  fridge-1:
-    build: ./simulators
-    command: ["python", "sensor.py"]
-    restart: unless-stopped
-    environment:
-      MQTT_HOST: mosquitto
-      MQTT_PORT: 1883
-      ZONE_ID: fridge-1
-      ZONE_TYPE: fridge
-      SENSOR_INTERVAL: ${SENSOR_INTERVAL:-5}
-    depends_on:
-      mosquitto:
-        condition: service_healthy
-
-  freezer-1:
-    build: ./simulators
-    command: ["python", "sensor.py"]
-    restart: unless-stopped
-    environment:
-      MQTT_HOST: mosquitto
-      MQTT_PORT: 1883
-      ZONE_ID: freezer-1
-      ZONE_TYPE: freezer
-      SENSOR_INTERVAL: ${SENSOR_INTERVAL:-5}
-    depends_on:
-      mosquitto:
-        condition: service_healthy
-
-  truck-1:
-    build: ./simulators
-    command: ["python", "truck.py"]
-    restart: unless-stopped
-    environment:
-      MQTT_HOST: mosquitto
-      MQTT_PORT: 1883
-      TRUCK_ID: truck-1
-      DELIVERY_ID: DLV-0001
-      SENSOR_INTERVAL: ${SENSOR_INTERVAL:-5}
-    depends_on:
-      mosquitto:
-        condition: service_healthy
-
-  # ---------- Backend (Member 1) ----------
   api:
-    build: ./backend
-    restart: unless-stopped
+    build: ./api
+    image: foodsafe-api:1.0
+    environment:
+      DATABASE_URL: postgresql+psycopg2://foodsafe:foodsafe@db:5432/foodsafe
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "8000:8000"
+
+  simulator:
+    build: ./simulator
+    image: foodsafe-simulator:1.0
     environment:
-      MQTT_HOST: mosquitto
-      MQTT_PORT: 1883
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      INFLUXDB_URL: http://influxdb:8086
-      INFLUXDB_ORG: ${INFLUXDB_ORG}
-      INFLUXDB_BUCKET: ${INFLUXDB_BUCKET}
-      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
+      API_URL: http://api:8000
     depends_on:
-      mosquitto:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-      influxdb:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - api
 
-  # ---------- Databases ----------
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  influxdb:
-    image: influxdb:2.7
-    restart: unless-stopped
-    ports:
-      - "8086:8086"
-    environment:
-      DOCKER_INFLUXDB_INIT_MODE: setup
-      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_USERNAME}
-      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_PASSWORD}
-      DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB_ORG}
-      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUXDB_BUCKET}
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_TOKEN}
-    volumes:
-      - influxdb-data:/var/lib/influxdb2
-    healthcheck:
-      test: ["CMD", "influx", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # ---------- Frontend (Member 2) ----------
-  web:
-    build: ./web
-    restart: unless-stopped
+  dashboard:
+    build: ./dashboard
+    image: foodsafe-dashboard:1.0
+    depends_on:
+      - api
     ports:
       - "8080:80"
-    depends_on:
-      api:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost/ || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
-  # ---------- Monitoring (Member 3) ----------
+  # Optional monitoring: docker compose --profile monitoring up --build
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: ["monitoring"]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - api
+
   grafana:
-    image: grafana/grafana:11.3.0
-    restart: unless-stopped
+    image: grafana/grafana:11.3.1
+    profiles: ["monitoring"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
     ports:
       - "3000:3000"
-    environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
-      INFLUXDB_ORG: ${INFLUXDB_ORG}
-      INFLUXDB_BUCKET: ${INFLUXDB_BUCKET}
-      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
-    volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - grafana-data:/var/lib/grafana
     depends_on:
-      influxdb:
-        condition: service_healthy
+      - prometheus
 
 volumes:
-  mosquitto-data:
-  postgres-data:
-  influxdb-data:
-  grafana-data:
+  pgdata:

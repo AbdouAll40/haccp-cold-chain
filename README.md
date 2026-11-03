@@ -1,45 +1,43 @@
-# HACCP Cold Chain Monitoring
+# FoodSafe: cold-chain monitoring (HACCP)
 
-DevOps module project, theme "safety food": temperature monitoring of fridges,
-freezers and delivery trucks (HACCP), product expiry dates, and live delivery tracking.
+Monitors fridges, freezers and cold rooms, records temperatures, raises an alert when a
+reading leaves the safe range, and tracks product expiry dates.
 
-## Services
-
-| Service | What it does | URL |
-|---|---|---|
-| `mosquitto` | MQTT broker | `localhost:1883` |
-| `fridge-1`, `freezer-1` | Temperature sensor simulators | — |
-| `truck-1` | Delivery truck simulator (GPS + temperature) | — |
-| `api` | Backend API (FastAPI) | http://localhost:8000/health |
-| `postgres` | Products, batches, deliveries, alerts | internal |
-| `influxdb` | Temperature and GPS history | http://localhost:8086 |
-| `web` | Dashboard | http://localhost:8080 |
-| `grafana` | Charts and alerts | http://localhost:3000 |
-
-## Quick start
-
+## Run it
 ```bash
-cp .env.example .env        # then change the passwords
-docker compose up -d --build
-docker compose ps           # every service should be "running" / "healthy"
+docker compose up --build
+```
+- Dashboard: http://localhost:8080
+- API docs (Swagger): http://localhost:8000/docs
+- Metrics: http://localhost:8000/metrics
+
+The simulator posts readings every 2 s and randomly "opens a door" so alerts appear.
+
+### With monitoring (Prometheus + Grafana)
+```bash
+docker compose --profile monitoring up --build
+```
+- Prometheus: http://localhost:9090 (try `foodsafe_temperature_celsius`)
+- Grafana: http://localhost:3000 (admin / admin). The Prometheus data source is pre-configured;
+  create a time-series panel with `foodsafe_temperature_celsius` and a stat panel with
+  `sum(foodsafe_alerts_total)`.
+
+## Tests
+```bash
+cd api
+pip install -r requirements-dev.txt
+pytest -q
 ```
 
-Watch the simulated data:
-
-```bash
-docker compose exec mosquitto mosquitto_sub -t 'coldchain/#' -v
+## Layout
+```
+api/         FastAPI + SQLAlchemy (PostgreSQL), tests
+simulator/   sensor simulator
+dashboard/   static page served by nginx (proxies /api to the API)
+monitoring/  Prometheus + Grafana config
+.github/     CI pipeline (lint, test, build, Trivy scan, push to GHCR) + PR template
 ```
 
-Stop everything: `docker compose down` (add `-v` to also delete the data).
-
-## Docs
-
-- [MQTT topics and message format](docs/mqtt.md)
-
-## Team
-
-| Member | Area |
-|---|---|
-| Member 1 | Data & backend (simulators, MQTT, API, databases) |
-| Member 2 | Web dashboard + map |
-| Member 3 | DevOps (Docker, CI/CD, monitoring) |
+## Git workflow
+Branch from `develop`, open a PR to `develop`; `main` only receives merges from `develop`.
+Images are pushed to GHCR only on `main`.
