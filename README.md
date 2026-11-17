@@ -1,80 +1,45 @@
-# FoodSafe
+# HACCP Cold Chain Monitoring
 
-FoodSafe is a smart food safety and cold-chain monitoring platform for tracking temperature compliance, equipment status, product expiry, and HACCP inspection records in one place.
+DevOps module project, theme "safety food": temperature monitoring of fridges,
+freezers and delivery trucks (HACCP), product expiry dates, and live delivery tracking.
 
-## Architecture
+## Services
 
-- Backend: FastAPI API with SQLAlchemy models and PostgreSQL support
-- Frontend: static dashboard served by Nginx with real API-driven data
-- Simulator: background service that posts realistic temperature readings
-- Monitoring: Prometheus for scraping and Grafana dashboards for operational visibility
-- Testing: Pytest for API and regression coverage
+| Service | What it does | URL |
+|---|---|---|
+| `mosquitto` | MQTT broker | `localhost:1883` |
+| `fridge-1`, `freezer-1` | Temperature sensor simulators | — |
+| `truck-1` | Delivery truck simulator (GPS + temperature) | — |
+| `api` | Backend API (FastAPI) | http://localhost:8000/health |
+| `postgres` | Products, batches, deliveries, alerts | internal |
+| `influxdb` | Temperature and GPS history | http://localhost:8086 |
+| `web` | Dashboard | http://localhost:8080 |
+| `grafana` | Charts and alerts | http://localhost:3000 |
 
-## Local setup
-
-1. Copy the sample environment file and adjust values if needed:
-   ```bash
-   cp .env.example .env
-   ```
-2. Start the app:
-   ```bash
-   docker compose up --build
-   ```
-3. Access the services:
-   - Dashboard: http://localhost:8080
-   - API docs: http://localhost:8000/docs
-   - Metrics: http://localhost:8000/metrics
-
-## Monitoring profile
+## Quick start
 
 ```bash
-docker compose --profile monitoring up --build
+cp .env.example .env        # then change the passwords
+docker compose up -d --build
+docker compose ps           # every service should be "running" / "healthy"
 ```
 
-- Prometheus: http://localhost:9090
-- Grafana: http://localhost:3000
-- Default Grafana credentials: admin / admin (or use the values from `.env`)
-
-## Backend development
+Watch the simulated data:
 
 ```bash
-cd api
-python -m pip install -r requirements-dev.txt
-python -m pytest -q
-python -m ruff check .
+docker compose exec mosquitto mosquitto_sub -t 'coldchain/#' -v
 ```
 
-## Environment variables
+Stop everything: `docker compose down` (add `-v` to also delete the data).
 
-The project reads from the local `.env` file when present. Available values are defined in [.env.example](.env.example).
+## Docs
 
-Key settings:
-- `DATABASE_URL`: PostgreSQL connection string for the API
-- `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`: database configuration
-- `API_PORT`, `DASHBOARD_PORT`, `PROMETHEUS_PORT`, `GRAFANA_PORT`: exposed service ports
+- [MQTT topics and message format](docs/mqtt.md)
 
-## Included functionality
+## Team
 
-- Equipment lifecycle management and threshold tracking
-- Product inventory with expiry monitoring
-- Alert generation and resolution
-- HACCP inspection recording
-- Temperature history and analytics export
-- Prometheus metrics for API monitoring
-
-## Troubleshooting
-
-- If the API is not ready, wait for the `db` and `api` health checks to pass.
-- If the simulator appears inactive, confirm the `api` container is healthy and that the service is not failing during startup.
-- If Grafana is empty, make sure the monitoring profile is enabled with `--profile monitoring`.
-- If the database is not connecting, check the `DATABASE_URL` value and the Postgres container status.
-
-## Project layout
-
-```text
-api/          FastAPI service and PostgreSQL-backed API
-simulator/    sensor simulator posting temperature samples
-monitoring/   Prometheus and Grafana configuration
-Dashboard/    static dashboard served by Nginx
-.github/      CI workflow for tests and image validation
-``` 
+| Member | Area |
+|---|---|
+| Member 1 | Data & backend (simulators, MQTT, API, databases) |
+| Member 2 | Web dashboard + map |
+| Member 3 | DevOps (Docker, CI/CD, monitoring) |
