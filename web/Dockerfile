@@ -5,7 +5,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
 # Stage 2: serve the static dashboard with nginx (no Node.js in the final image)
-FROM nginx:1.27-alpine
+FROM nginx:1.31-alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY index.html app.js style.css /usr/share/nginx/html/
 COPY --from=deps /build/node_modules/chart.js/dist/chart.umd.js /usr/share/nginx/html/vendor/chart.umd.js
