@@ -42,7 +42,7 @@ def positions(step_km):
     """Yield points every step_km along the route, forever, back and forth."""
     route = ROUTE
     while True:
-        for a, b in zip(route, route[1:]):
+        for a, b in zip(route, route[1:], strict=False):
             leg = distance_km(a, b)
             n = max(1, round(leg / step_km))
             for i in range(n):
