@@ -2,10 +2,118 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HACCP Cold Chain</title>
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>HACCP Cold Chain</h1>
-  <p>Dashboard coming soon. API health: <a href="http://localhost:8000/health">localhost:8000/health</a></p>
+<header class="top">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">❄</span>
+    <div>
+      <h1>HACCP Cold Chain</h1>
+      <p class="muted">Temperatures, expiry dates and deliveries, live</p>
+    </div>
+  </div>
+  <div class="conn">
+    <span id="conn-api" class="pill pill-wait">API…</span>
+    <span id="conn-mqtt" class="pill pill-wait">MQTT…</span>
+    <span id="updated" class="muted small"></span>
+  </div>
+</header>
+
+<main>
+  <section class="kpis" id="kpis" aria-label="Key figures"></section>
+
+  <section class="grid-zones" id="zones" aria-label="Storage zones and trucks"></section>
+
+  <section class="row two">
+    <div class="card">
+      <div class="card-head">
+        <h2>Temperature, last 30 minutes</h2>
+        <div class="seg" id="source-picker" role="tablist" aria-label="Choose a sensor"></div>
+      </div>
+      <div class="chart-box tall"><canvas id="temp-chart"></canvas></div>
+      <p class="muted small" id="temp-legend">Dashed lines: HACCP limits.</p>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <h2>Live delivery tracking</h2>
+        <span class="muted small" id="delivery-info"></span>
+      </div>
+      <div id="map"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Statistics</h2>
+      <div class="seg" id="window-picker">
+        <button data-h="1" class="on">1 h</button>
+        <button data-h="6">6 h</button>
+        <button data-h="24">24 h</button>
+      </div>
+    </div>
+    <div class="stats-layout">
+      <div class="table-wrap">
+        <table class="table" id="stats-table">
+          <thead><tr><th>Sensor</th><th>Limits</th><th class="num">Min</th><th class="num">Avg</th><th class="num">Max</th><th class="num">Readings</th><th>Time in range</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="mini-charts">
+        <div><h3>Alerts by type (24 h)</h3><div class="chart-box"><canvas id="alerts-kind-chart"></canvas></div></div>
+        <div><h3>Batches by expiry status</h3><div class="chart-box"><canvas id="batches-chart"></canvas></div></div>
+        <div class="wide"><h3>Alerts per hour (last 12 h)</h3><div class="chart-box"><canvas id="alerts-hour-chart"></canvas></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="row two">
+    <div class="card">
+      <div class="card-head"><h2>Open alerts</h2><span class="muted small" id="alerts-count"></span></div>
+      <div class="table-wrap scroll">
+        <table class="table" id="alerts-table">
+          <thead><tr><th>Time</th><th>Type</th><th>Source</th><th>Details</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Product batches</h2><span class="muted small">Expired batches cannot be shipped</span></div>
+      <div class="table-wrap scroll">
+        <table class="table" id="batches-table">
+          <thead><tr><th>Lot</th><th>Product</th><th class="num">Qty</th><th>Location</th><th>Expiry</th><th>Status</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>HACCP inspections</h2><span class="muted small">Manual temperature checks</span></div>
+    <form id="inspection-form" class="inline-form">
+      <label>Equipment <select name="equipment" id="insp-equipment" required></select></label>
+      <label>Observed °C <input name="observed_temperature" type="number" step="0.1" required></label>
+      <label>Inspector <input name="inspector" required maxlength="100"></label>
+      <label class="grow">Notes <input name="notes" maxlength="500"></label>
+      <button type="submit">Record</button>
+      <span id="insp-msg" class="small" role="status"></span>
+    </form>
+    <div class="table-wrap">
+      <table class="table" id="inspections-table">
+        <thead><tr><th>Date</th><th>Equipment</th><th class="num">Observed</th><th>Result</th><th>Inspector</th><th>Notes</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<footer class="muted small">HACCP Cold Chain · DevOps project · data refreshes every 5 seconds</footer>
+
+<script src="vendor/chart.umd.js"></script>
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
