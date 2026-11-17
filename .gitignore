@@ -1,4 +1,11 @@
+.env
 __pycache__/
+*.pyc
+.venv/
+node_modules/
+dist/
+.idea/
+.vscode/
 *.db
 .pytest_cache/
 .ruff_cache/

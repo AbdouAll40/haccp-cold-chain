@@ -10,7 +10,7 @@ Change it only through a pull request that all three members approve.
 - Payloads are JSON, UTF-8.
 - `ts` is the time of the reading in ISO 8601 UTC, e.g. `2026-11-03T08:15:00Z`.
 - Units are part of the field name: `temperature_c` (°C), `speed_kmh` (km/h).
-- IDs are lowercase with dashes: `fridge-1`, `freezer-1`, `truck-1`.
+- IDs are lowercase with dashes: `fridge-1`, `freezer-1`, `coldroom-1`, `truck-1`.
 - QoS 1 for every message (delivered at least once).
 
 ## Topics

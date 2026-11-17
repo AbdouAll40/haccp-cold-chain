@@ -10,11 +10,13 @@ import paho.mqtt.client as mqtt
 MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 INTERVAL = float(os.getenv("SENSOR_INTERVAL", "5"))
+# Chance per reading that an incident starts (door left open, power cut).
+ANOMALY_RATE = float(os.getenv("ANOMALY_RATE", "0.006"))
 
 # Target temperature and HACCP limit per zone type (°C)
 ZONES = {
-    "fridge": {"target": 3.0, "noise": 0.3},
-    "freezer": {"target": -20.0, "noise": 0.5},
+    "fridge": {"target": 2.5, "noise": 0.15},
+    "freezer": {"target": -21.0, "noise": 0.3},
 }
 
 
@@ -48,7 +50,7 @@ class Thermometer:
     """Random walk around the target temperature, with occasional anomalies
     (door left open, power loss) so the alert rules have something to catch."""
 
-    def __init__(self, zone_type: str, anomaly_rate: float = 0.03):
+    def __init__(self, zone_type: str, anomaly_rate: float = ANOMALY_RATE):
         cfg = ZONES[zone_type]
         self.target = cfg["target"]
         self.noise = cfg["noise"]

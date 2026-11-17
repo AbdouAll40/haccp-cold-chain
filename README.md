@@ -1,80 +1,106 @@
-# FoodSafe
+# HACCP Cold Chain Monitoring
 
-FoodSafe is a smart food safety and cold-chain monitoring platform for tracking temperature compliance, equipment status, product expiry, and HACCP inspection records in one place.
+[![CI/CD](https://github.com/AbdouAll40/haccp-cold-chain/actions/workflows/ci.yml/badge.svg)](https://github.com/AbdouAll40/haccp-cold-chain/actions/workflows/ci.yml)
+
+DevOps module project, theme "safety food". The system monitors the food cold chain following HACCP:
+
+- **Temperatures** of fridges, freezers, a cold room and a refrigerated truck, with alerts when a reading leaves the HACCP limits or a sensor goes silent.
+- **Expiry dates** of product batches: OK, expiring soon, expired. Expired batches cannot be shipped.
+- **Delivery tracking**: the truck's GPS position on a live map. A temperature breach in transit flags every batch on board.
 
 ## Architecture
 
-- Backend: FastAPI API with SQLAlchemy models and PostgreSQL support
-- Frontend: static dashboard served by Nginx with real API-driven data
-- Simulator: background service that posts realistic temperature readings
-- Monitoring: Prometheus for scraping and Grafana dashboards for operational visibility
-- Testing: Pytest for API and regression coverage
-
-## Local setup
-
-1. Copy the sample environment file and adjust values if needed:
-   ```bash
-   cp .env.example .env
-   ```
-2. Start the app:
-   ```bash
-   docker compose up --build
-   ```
-3. Access the services:
-   - Dashboard: http://localhost:8080
-   - API docs: http://localhost:8000/docs
-   - Metrics: http://localhost:8000/metrics
-
-## Monitoring profile
-
-```bash
-docker compose --profile monitoring up --build
+```
+ fridge-1 ┐
+freezer-1 ├─ MQTT ─► mosquitto ─► api (FastAPI) ─┬─► PostgreSQL (equipment, batches, alerts, readings)
+coldroom-1┤                        HACCP rules    └─► InfluxDB ─► Grafana (dashboards)
+  truck-1 ┘                             │
+                                        └─ REST ◄─ web (nginx) ◄─ browser: dashboard, map, charts
+                                        └─ /metrics ◄─ Prometheus (optional profile)
 ```
 
-- Prometheus: http://localhost:9090
-- Grafana: http://localhost:3000
-- Default Grafana credentials: admin / admin (or use the values from `.env`)
+| Service | Role | URL |
+|---|---|---|
+| `mosquitto` | MQTT broker | `localhost:1883` |
+| `fridge-1`, `freezer-1`, `coldroom-1` | Temperature sensor simulators | — |
+| `truck-1` | Refrigerated truck simulator (GPS + cargo temperature) | — |
+| `api` | Ingests MQTT, applies HACCP rules, REST API, Swagger docs | http://localhost:8000/docs |
+| `postgres` | Equipment, products, batches, deliveries, alerts, inspections | internal |
+| `influxdb` | Temperature and GPS history | http://localhost:8086 |
+| `web` | Dashboard: KPIs, live map, charts, statistics, alerts, batches, inspections | http://localhost:8080 |
+| `grafana` | Provisioned "HACCP Cold Chain" dashboard | http://localhost:3000 |
+| `prometheus` | Scrapes API metrics (profile `monitoring`) | http://localhost:9090 |
 
-## Backend development
+## Quick start
 
 ```bash
-cd api
-python -m pip install -r requirements-dev.txt
-python -m pytest -q
-python -m ruff check .
+cp .env.example .env          # then change the passwords
+docker compose up -d --build
+docker compose ps             # every service Up, health-checked ones "healthy"
 ```
 
-## Environment variables
+Open the dashboard at http://localhost:8080. Grafana login: `admin` / the `GRAFANA_ADMIN_PASSWORD` from `.env`.
 
-The project reads from the local `.env` file when present. Available values are defined in [.env.example](.env.example).
+Watch the raw MQTT data:
 
-Key settings:
-- `DATABASE_URL`: PostgreSQL connection string for the API
-- `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`: database configuration
-- `API_PORT`, `DASHBOARD_PORT`, `PROMETHEUS_PORT`, `GRAFANA_PORT`: exposed service ports
+```bash
+docker compose exec mosquitto mosquitto_sub -t "coldchain/#" -v
+```
 
-## Included functionality
+Trigger an alert by hand (a fridge at 9.5 °C):
 
-- Equipment lifecycle management and threshold tracking
-- Product inventory with expiry monitoring
-- Alert generation and resolution
-- HACCP inspection recording
-- Temperature history and analytics export
-- Prometheus metrics for API monitoring
+```bash
+docker compose exec mosquitto mosquitto_pub -t coldchain/sensors/fridge-1/temperature \
+  -m '{"zone_id":"fridge-1","zone_type":"fridge","temperature_c":9.5}'
+```
 
-## Troubleshooting
+Optional Prometheus: `docker compose --profile monitoring up -d`.
+Stop: `docker compose down` (add `-v` to delete the data).
 
-- If the API is not ready, wait for the `db` and `api` health checks to pass.
-- If the simulator appears inactive, confirm the `api` container is healthy and that the service is not failing during startup.
-- If Grafana is empty, make sure the monitoring profile is enabled with `--profile monitoring`.
-- If the database is not connecting, check the `DATABASE_URL` value and the Postgres container status.
+## HACCP rules
 
-## Project layout
+| Rule | Where |
+|---|---|
+| Fridge, cold room, truck: 0 to 4 °C; freezer: ≤ −18 °C. 3 °C past the limit = critical | `backend/app/rules.py` |
+| Sensor silent after 3 × `SENSOR_INTERVAL`, or MQTT "last will" received | `rules.is_silent`, `services.handle_status` |
+| Batch expiring within 3 days = warning, expired = critical; expired batches cannot be loaded into a delivery | `rules.expiry_status`, `rules.can_ship` |
+| Breach in a fridge or truck flags the batches stored or carried there | `services.handle_sensor_reading`, `handle_truck_telemetry` |
 
-```text
-api/          FastAPI service and PostgreSQL-backed API
-simulator/    sensor simulator posting temperature samples
-monitoring/   Prometheus and Grafana configuration
-Dashboard/    static dashboard served by Nginx
-.github/      CI workflow for tests and image validation
-``` 
+## API (main endpoints)
+
+`GET /health` · `GET /equipment` · `GET /trucks` · `GET /deliveries` · `GET /readings?source=fridge-1&minutes=30` ·
+`GET /batches?status=soon` · `POST /batches` · `POST /deliveries/{code}/batches/{lot}` ·
+`GET /alerts?status=open` · `POST /alerts/{id}/resolve` · `GET|POST /inspections` · `GET /stats?hours=1` · `GET /metrics/`
+
+Full interactive documentation: http://localhost:8000/docs
+
+## Development
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+pytest -q          # 25 unit and API tests
+ruff check .
+```
+
+## CI/CD
+
+`.github/workflows/ci.yml` runs on every push and pull request:
+
+1. **Lint and tests**: `ruff` and `pytest`.
+2. **Compose validation**: `docker compose config`.
+3. **Images**: build `api`, `simulators` and `web`, scan each with **Trivy** (HIGH/CRITICAL), and on `main` push them to GitHub Container Registry (`ghcr.io/<owner>/haccp-*`).
+
+Dependabot keeps pip, npm, Docker and GitHub Actions dependencies up to date. `main` is protected: changes go through a reviewed pull request.
+
+## Docs
+
+- [MQTT topics and message format](docs/mqtt.md)
+
+## Team
+
+| Member | Area |
+|---|---|
+| Abdou | Leader, DevOps (Docker, CI/CD, monitoring) |
+| Aymen | Data and backend |
+| Achref | Dashboard and map; proposed the FoodSafe data model (equipment, products, alerts, inspections) |

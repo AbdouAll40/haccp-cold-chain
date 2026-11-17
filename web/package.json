@@ -1,0 +1,9 @@
+{
+  "name": "haccp-dashboard",
+  "private": true,
+  "description": "Front-end libraries bundled into the dashboard image (no CDN needed at runtime)",
+  "dependencies": {
+    "chart.js": "4.4.1",
+    "leaflet": "1.9.4"
+  }
+}
