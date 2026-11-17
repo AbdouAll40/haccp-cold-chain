@@ -3,5 +3,5 @@ uvicorn[standard]==0.32.1
 SQLAlchemy==2.0.36
 psycopg2-binary==2.9.10
 paho-mqtt==2.1.0
-influxdb-client==1.47.0
+influxdb-client==1.50.0
 prometheus-client==0.21.0
